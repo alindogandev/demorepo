@@ -81,15 +81,6 @@ html,body{background:#000;height:100%;overflow:hidden;}
 .pg .cb{padding:0;font-size:13px;border-radius:4px;justify-content:center;width:24px;height:24px;}
 .pc{color:rgba(255,255,255,.2)!important;border-color:rgba(255,255,255,.07)!important;cursor:default!important;}
 .pc:hover{background:transparent!important;}
-#tstrip{display:flex;gap:6px;padding:8px 12px;background:rgba(8,8,8,.99);flex-shrink:0;overflow-x:auto;border-top:.5px solid rgba(255,255,255,.06);}
-#tstrip::-webkit-scrollbar{height:3px;}
-#tstrip::-webkit-scrollbar-track{background:transparent;}
-#tstrip::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:2px;}
-.tw{position:relative;flex-shrink:0;width:64px;height:40px;}
-.th{width:64px;height:40px;object-fit:cover;border-radius:4px;cursor:pointer;border:2px solid transparent;opacity:.42;transition:opacity .2s,border-color .2s;display:block;}
-.th.at{border-color:#fff;opacity:1;}
-.th:hover{opacity:.8;}
-.tvi{position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.72);color:#fff;font-size:9px;border-radius:2px;padding:1px 4px;pointer-events:none;font-family:system-ui,sans-serif;}
 
 /* Playlist panel */
 #plpanel{position:fixed;top:0;right:-320px;width:300px;height:100vh;background:rgba(10,10,10,.97);border-left:.5px solid rgba(255,255,255,.1);z-index:100;display:flex;flex-direction:column;transition:right .25s ease;}
@@ -375,7 +366,7 @@ html,body{background:#000;height:100%;overflow:hidden;}
       <svg id="ifs" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
     </button>
   </div>
-  <div id="tstrip"></div>
+
 </div>
 </div>
 
@@ -502,7 +493,7 @@ g('lbcont').onclick = async () => {
 };
 
 /* ── State ── */
-let items = [], sls = [], tws = [], cur = 0, playing = true,
+let items = [], sls = [], cur = 0, playing = true,
     tmr = null, ptmr = null, ps = null, kbId = null,
     zoom = 1, panX = 0, panY = 0, muted = false, vol = 1,
     mirrorX = false, mirrorY = false, rotation = 0,
@@ -623,7 +614,8 @@ const FNS = [
   {id:'hidectl', label:'Hide Controls',   def:'c'},
   {id:'rotCW',   label:'Rotate CW',       def:'r'},
   {id:'rotCCW',  label:'Rotate CCW',      def:'R'},
-  {id:'fname',   label:'Toggle Filename', def:'n'},
+  {id:'fname',    label:'Toggle Filename', def:'n'},
+  {id:'playlist', label:'Toggle Playlist', def:'l'},
 ];
 let keyMap = {}; FNS.forEach(f => keyMap[f.id] = f.def);
 
@@ -792,13 +784,14 @@ function changeZoom(d) {
   zoom = Math.max(0.1, Math.min(10, zoom + d)); updZoom();
   const item = getMediaItems()[cur];
   if (item) { item.zoom = zoom; saveItemLS(item); }
-  staticT();
+  if (!kbId) staticT();
 }
 function doPan(dx, dy) {
-  const s = 8 / zoom; panX += dx * s; panY += dy * s;
+  const s = 8 / zoom;
+  panX += (mirrorX ? -dx : dx) * s; panY += (mirrorY ? -dy : dy) * s;
   const item = getMediaItems()[cur];
   if (item) { item.panX = panX; item.panY = panY; saveItemLS(item); }
-  staticT();
+  if (!kbId) staticT();
 }
 function resetPan() {
   zoom = 1; panX = 0; panY = 0; updZoom();
@@ -841,16 +834,16 @@ document.addEventListener('mousemove', e => {
     if (!lDragMoved && Math.hypot(dx,dy) < 4) return;
     lDragMoved = true; stage.classList.add('ldrag');
     if (lDragOnComp) {
-      const isVmax = stage.classList.contains('vmax');
-      const isMirror = maxPreset === 1 || maxPreset === 4;
-      const mdx = (isMirror && !isVmax) ? -dx : dx;
-      const mdy = (isMirror && isVmax) ? -dy : dy;
-      compPanX = lDragPX + mdx / compZoom; compPanY = lDragPY + mdy / compZoom; updCompT();
-    } else { panX = lDragPX + dx / zoom; panY = lDragPY + dy / zoom; staticT(); }
+      compPanX = lDragPX + dx / compZoom; compPanY = lDragPY + dy / compZoom; updCompT();
+    } else {
+      panX = lDragPX + (mirrorX ? -dx : dx) / zoom;
+      panY = lDragPY + (mirrorY ? -dy : dy) / zoom;
+      if (!kbId) staticT();
+    }
   } else if (midDrag) {
-    panX = midStartPX + (e.clientX - midStartX) / zoom;
-    panY = midStartPY + (e.clientY - midStartY) / zoom;
-    staticT();
+    panX = midStartPX + (mirrorX ? -(e.clientX - midStartX) : (e.clientX - midStartX)) / zoom;
+    panY = midStartPY + (mirrorY ? -(e.clientY - midStartY) : (e.clientY - midStartY)) / zoom;
+    if (!kbId) staticT();
   }
 });
 document.addEventListener('mouseup', e => {
@@ -923,7 +916,7 @@ g('bfname').onclick = toggleFilename;
 /* ── Hide / show controls ── */
 function toggleControls() {
   ctrlsVisible = !ctrlsVisible;
-  [g('ctrls'), g('tstrip'), g('cpanel')].forEach(el => el.style.display = ctrlsVisible ? '' : 'none');
+  [g('ctrls'), g('cpanel')].forEach(el => el.style.display = ctrlsVisible ? '' : 'none');
   g('showctrl').classList.toggle('visible', !ctrlsVisible);
 }
 g('bhide').onclick = toggleControls;
@@ -934,13 +927,13 @@ function toggleWatchMode() {
   watchMode = !watchMode;
   if (watchMode) {
     preWatchCtrlsVis = ctrlsVisible;
-    if (ctrlsVisible) { ctrlsVisible = false; [g('ctrls'),g('tstrip'),g('cpanel')].forEach(el => el.style.display = 'none'); }
+    if (ctrlsVisible) { ctrlsVisible = false; [g('ctrls'),g('cpanel')].forEach(el => el.style.display = 'none'); }
     g('showctrl').classList.remove('visible');
     g('watchbadge').classList.add('show');
     closePL();
     app.requestFullscreen?.().catch(() => {});
   } else {
-    if (preWatchCtrlsVis) { ctrlsVisible = true; [g('ctrls'),g('tstrip')].forEach(el => el.style.display = ''); }
+    if (preWatchCtrlsVis) { ctrlsVisible = true; g('ctrls').style.display = ''; }
     g('watchbadge').classList.remove('show');
     document.exitFullscreen?.();
   }
@@ -951,9 +944,17 @@ g('brev').onclick = () => { reversePlay = !reversePlay; g('brev').classList.togg
 
 /* ── Horizontal / Vertical Max Mode + Presets ── */
 function cycleMaxPreset() {
-  maxPreset = maxPreset % 4 + 1; // 1→2→3→4→1
-  const on = hMaxEnabled || vMaxEnabled;
-  if (!on) { hMaxEnabled = true; g('bhmax').classList.add('on'); } // auto-enable H if nothing on
+  if (maxPreset === 4) {
+    // Cycle to off
+    maxPreset = 0; hMaxEnabled = false; vMaxEnabled = false;
+    g('bhmax').classList.remove('on'); g('bvmax').classList.remove('on');
+    showMaxCompanion(cur);
+    if (!isV(cur)) startKB(cur);
+    showToast('Max Mode: Off', 2000);
+    return;
+  }
+  maxPreset = maxPreset === 0 ? 1 : maxPreset + 1;
+  if (!hMaxEnabled && !vMaxEnabled) { hMaxEnabled = true; g('bhmax').classList.add('on'); }
   showMaxCompanion(cur);
   if (!isV(cur)) startKB(cur);
   showToast('Max Mode: ' + MAX_PRESET_LABELS[maxPreset - 1], 2000);
@@ -973,10 +974,7 @@ function getActiveMaxMode(i) {
 function updCompT() {
   if (compKbId) return; // KB Right is managing its own transform
   const m = g('maxcomp').querySelector('img,video'); if (!m) return;
-  const isVmax = stage.classList.contains('vmax') || stage.classList.contains('vmax3');
-  const isMirror = maxPreset === 1 || maxPreset === 4;
-  const mirror = isMirror ? (isVmax ? 'scaleY(-1) ' : 'scaleX(-1) ') : '';
-  const t = `${mirror}scale(${compZoom.toFixed(4)}) translate(${compPanX.toFixed(1)}px,${compPanY.toFixed(1)}px)`;
+  const t = `scale(${compZoom.toFixed(4)}) translate(${compPanX.toFixed(1)}px,${compPanY.toFixed(1)}px)`;
   m.style.transform = t;
   if (maxPreset === 4) {
     const m2 = g('maxcomp2')?.querySelector('img,video'); if (m2) m2.style.transform = t;
@@ -991,21 +989,19 @@ function isInCompanion(cx, cy) {
   if (cl.contains('vmax')) return cy > r.top + r.height / 2;
   return false;
 }
-function startCompKB(i) {
+function startCompKB(i, seekFrac = 0) {
   if (compKbId) { cancelAnimationFrame(compKbId); compKbId = null; }
   const mc = g('maxcomp'), med = mc?.querySelector('img'); if (!med) return;
   const mc2 = g('maxcomp2'), med2 = mc2?.querySelector('img');
   const p = getKBPreset(i);
   if (!p) { updCompT(); return; }
   const dur = getEDur(i); let st = null;
-  const isVmax = stage.classList.contains('vmax') || stage.classList.contains('vmax3');
-  const mirrorPfx = (maxPreset === 1 || maxPreset === 4) ? (isVmax ? 'scaleY(-1) ' : 'scaleX(-1) ') : '';
   function step(ts) {
-    if (!st) st = ts;
+    if (!st) st = ts - (seekFrac * dur);
     const t = Math.min((ts - st) / dur, 1), ev = kbEase(t);
     const sc = (p.fs + (p.ts - p.fs) * ev) * compZoom;
     const kx = p.fx + (p.tx - p.fx) * ev, ky = p.fy + (p.ty - p.fy) * ev;
-    const tf = `${mirrorPfx}scale(${sc.toFixed(4)}) translate(calc(${kx.toFixed(2)}% + ${compPanX.toFixed(1)}px),calc(${ky.toFixed(2)}% + ${compPanY.toFixed(1)}px))`;
+    const tf = `scale(${sc.toFixed(4)}) translate(calc(${kx.toFixed(2)}% + ${compPanX.toFixed(1)}px),calc(${ky.toFixed(2)}% + ${compPanY.toFixed(1)}px))`;
     med.style.transform = tf;
     if (med2) med2.style.transform = tf;
     if (t < 1) compKbId = requestAnimationFrame(step);
@@ -1033,14 +1029,10 @@ function showMaxCompanion(curIdx) {
   if (!mode) return;
   const mi = getMediaItems(), item = mi[curIdx]; if (!item) return;
   compZoom = 1; compPanX = 0; compPanY = 0;
-  const isMirrorMode = mode === 'vmax' || mode === 'vmax3';
-  const mirrorTransform = isMirrorMode ? 'scaleY(-1)' : 'scaleX(-1)';
   const med = makeCompMed(item);
-  if (maxPreset === 1 || maxPreset === 4) med.style.transform = mirrorTransform;
   mc.appendChild(med);
   if (maxPreset === 4 && mc2) {
     const med2 = makeCompMed(item);
-    med2.style.transform = mirrorTransform;
     mc2.appendChild(med2);
   }
   stage.classList.add(mode);
@@ -1273,9 +1265,8 @@ g('bru').onclick = function() {
   if (kbId) { cancelAnimationFrame(kbId); kbId = null; }
   if (compKbId) { cancelAnimationFrame(compKbId); compKbId = null; }
   sls.forEach(s => { const v = s.querySelector('video'); if (v) v.pause(); });
-  items = []; sls = []; tws = []; selectedItems.clear(); lastClickedMI = -1;
+  items = []; sls = []; selectedItems.clear(); lastClickedMI = -1;
   [...stage.children].forEach(c => { if (c.id !== 'fnov' && c.id !== 'watchbadge' && c.id !== 'maxcomp' && c.id !== 'maxcomp2') c.remove(); });
-  g('tstrip').innerHTML = '';
   stage.classList.remove('hmax','vmax','hmax3','vmax3');
   viewer.style.display = 'none'; dz.style.display = 'flex'; fi.value = '';
   if (!ctrlsVisible) toggleControls();
@@ -1390,7 +1381,7 @@ function makeVid(item) {
 
 function buildSlideDOM() {
   [...stage.children].forEach(c => { if (c.id !== 'fnov' && c.id !== 'watchbadge' && c.id !== 'maxcomp' && c.id !== 'maxcomp2') c.remove(); });
-  sls = []; tws = []; g('tstrip').innerHTML = '';
+  sls = [];
   getMediaItems().forEach((item, i) => {
     const sl = document.createElement('div'); sl.className = 'sl';
     const med = item.type === 'video' ? makeVid(item) : makeImg(item);
@@ -1405,14 +1396,6 @@ function buildSlideDOM() {
         if (playing && sls.indexOf(cap) === cur) setTimeout(() => goTo(nextMI()), 300);
       };
     }
-    const tw = document.createElement('div'); tw.className = 'tw';
-    if (item.type === 'video') {
-      const tv = document.createElement('video'); tv.src = item.url; tv.className = 'th'; tv.preload = 'metadata'; tv.muted = true; tv.onclick = () => goTo(i); tw.appendChild(tv);
-      const vi = document.createElement('div'); vi.className = 'tvi'; vi.textContent = '▶'; tw.appendChild(vi);
-    } else {
-      const ti = document.createElement('img'); ti.src = item.url; ti.className = 'th'; ti.onclick = () => goTo(i); tw.appendChild(ti);
-    }
-    g('tstrip').appendChild(tw); tws.push(tw);
   });
 }
 
@@ -1652,8 +1635,6 @@ function playCurVid() {
 
 function showSlide(i) {
   sls.forEach((s, j) => { s.classList.remove('companion'); s.className = 'sl' + (j === i ? ' on' : ''); });
-  tws.forEach((tw, j) => { const e = tw.querySelector('img,video'); if (e) e.className = 'th' + (j === i ? ' at' : ''); });
-  tws[i]?.querySelector('img,video')?.scrollIntoView?.({behavior:'smooth',block:'nearest',inline:'nearest'});
   g('sc').textContent = (i+1) + '/' + sls.length;
   g('fnov').textContent = getMediaItems()[i]?.name || '';
   applySlideSettings(i);
@@ -1663,7 +1644,7 @@ function showSlide(i) {
   updPlCur();
 }
 
-function startKB(i) {
+function startKB(i, seekFrac = 0) {
   if (isV(i)) return;
   const img = sls[i]?.querySelector('img'); if (!img) return;
   if (kbId) { cancelAnimationFrame(kbId); kbId = null; }
@@ -1677,7 +1658,7 @@ function startKB(i) {
   if (!p) { img.style.transform = `${mediaPrefix()}scale(${zoom.toFixed(4)}) translate(${panX.toFixed(1)}px,${panY.toFixed(1)}px)`; return; }
   const dur = getEDur(i); let st = null;
   function step(ts) {
-    if (!st) st = ts;
+    if (!st) st = ts - seekFrac * dur;
     const t = Math.min((ts - st) / dur, 1), ev = kbEase(t);
     const sc = (p.fs + (p.ts - p.fs) * ev) * zoom;
     const kx = p.fx + (p.tx - p.fx) * ev, ky = p.fy + (p.ty - p.fy) * ev;
@@ -1704,6 +1685,32 @@ function startVProg(i) {
   }, 100);
 }
 
+function seekProg(frac) {
+  frac = Math.max(0, Math.min(1, frac));
+  g('pb').style.width = (frac * 100).toFixed(1) + '%';
+  if (isV(cur)) {
+    const v = sls[cur]?.querySelector('video');
+    if (v && isFinite(v.duration)) v.currentTime = frac * v.duration;
+  } else {
+    ps = Date.now() - frac * getEDur(cur);
+    startKB(cur, frac);
+    const mode = getActiveMaxMode(cur);
+    if (mode && (maxPreset === 1 || maxPreset === 3 || maxPreset === 4)) startCompKB(cur, frac);
+  }
+}
+let pbDragging = false;
+g('pbw').addEventListener('mousedown', e => {
+  pbDragging = true; e.preventDefault();
+  const r = g('pbw').getBoundingClientRect();
+  seekProg((e.clientX - r.left) / r.width);
+});
+document.addEventListener('mousemove', e => {
+  if (!pbDragging) return;
+  const r = g('pbw').getBoundingClientRect();
+  seekProg((e.clientX - r.left) / r.width);
+});
+document.addEventListener('mouseup', () => { pbDragging = false; });
+
 function schedNext() {
   clearTimeout(tmr); if (!playing || isV(cur)) return;
   tmr = setTimeout(() => { goTo(nextMI()); schedNext(); }, getEDur(cur));
@@ -1720,8 +1727,6 @@ function goTo(i) {
   cur = (i + len) % len;
   applySlideSettings(cur);
   sls[cur].className = 'sl on fe';
-  tws.forEach((tw, j) => { const e = tw.querySelector('img,video'); if (e) e.className = 'th' + (j === cur ? ' at' : ''); });
-  tws[cur]?.querySelector('img,video')?.scrollIntoView?.({behavior:'smooth',block:'nearest',inline:'nearest'});
   g('sc').textContent = (cur+1) + '/' + sls.length;
   g('fnov').textContent = getMediaItems()[cur]?.name || '';
   pauseVids();
@@ -1792,7 +1797,7 @@ g('bfs').onclick = () => {
 document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement) {
     g('ifs').innerHTML = '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>';
-    if (watchMode) { watchMode = false; g('watchbadge').classList.remove('show'); if (preWatchCtrlsVis) { ctrlsVisible = true; [g('ctrls'),g('tstrip')].forEach(el => el.style.display=''); } }
+    if (watchMode) { watchMode = false; g('watchbadge').classList.remove('show'); if (preWatchCtrlsVis) { ctrlsVisible = true; g('ctrls').style.display = ''; } }
   }
 });
 
@@ -1852,7 +1857,7 @@ document.addEventListener('keydown', e => {
 
   const k = e.key;
   /* Color control shortcuts */
-  const clrNudge = {'1':['c',-1],'2':['c',1],'3':['b',-1],'4':['b',1],'5':['g',-1],'6':['g',1],'7':['s',-1],'8':['s',1],'9':['h',-1],'0':['h',1],'y':['sh',-1],'u':['sh',1],'i':['hl',-1],'o':['hl',1]};
+  const clrNudge = {'1':['c',-2],'2':['c',2],'3':['b',-2],'4':['b',2],'5':['g',-2],'6':['g',2],'7':['s',-2],'8':['s',2],'9':['h',-2],'0':['h',2],'y':['sh',-2],'u':['sh',2],'i':['hl',-2],'o':['hl',2]};
   if (!e.ctrlKey && !e.altKey && !e.metaKey && clrNudge[k]) { nudgeColor(...clrNudge[k]); return; }
   if (k === keyMap.next) goTo(cur + 1);
   else if (k === keyMap.prev) goTo(cur - 1);
@@ -1868,6 +1873,7 @@ document.addEventListener('keydown', e => {
   else if (k === keyMap.rotCW) rotateClockwise();
   else if (k === keyMap.rotCCW) rotateCounter();
   else if (k.toLowerCase() === keyMap.fname.toLowerCase()) toggleFilename();
+  else if (k.toLowerCase() === keyMap.playlist.toLowerCase()) togglePL();
   else if (k.toLowerCase() === 'x') cycleMaxPreset();
 });
 updLandingInfo();
