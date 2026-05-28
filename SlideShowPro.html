@@ -626,8 +626,15 @@ const FNS = [
   {id:'rotCCW',  label:'Rotate CCW',      def:'R'},
   {id:'fname',    label:'Toggle Filename', def:'n'},
   {id:'playlist', label:'Toggle Playlist', def:'l'},
-  {id:'saveAs',    label:'Save Image As',    def:''},
-  {id:'overwrite', label:'Overwrite Image',  def:''},
+  {id:'saveAs',    label:'Save Image As (Ctrl+S)',       def:''},
+  {id:'overwrite', label:'Overwrite Image (Ctrl+Shift+S)', def:''},
+  {id:'colPanel',  label:'Color Adjustments',  def:'a'},
+  {id:'kbPanel',   label:'Ken Burns Settings',  def:'k'},
+  {id:'screenshot',label:'Screenshot',          def:'s'},
+  {id:'watchMode', label:'Watch Mode',          def:'w'},
+  {id:'shuffle',   label:'Shuffle Playlist',    def:'z'},
+  {id:'reverse',   label:'Toggle Reverse',      def:'t'},
+  {id:'maxPreset', label:'Cycle Max Preset',    def:'x'},
 ];
 let keyMap = {}; FNS.forEach(f => keyMap[f.id] = f.def);
 
@@ -1154,16 +1161,7 @@ g('ctx-remove').onclick = () => {
 g('ctx-del').onclick = () => {
   ctxmenu.style.display = 'none';
   const mi = getMediaItems(), item = mi[cur]; if (!item) return;
-  const fname = item.name || '';
-  pendingDeleteItem = item.fileHandle ? item : null;
-  removeItem(items.indexOf(item), true);
-  if (fname) {
-    if (pendingDeleteItem) {
-      showToast(`<b style="color:#fff">${fname}</b><br><span style="color:rgba(255,255,255,.5);font-size:11px">Removed from playlist.</span><br><button onclick="confirmDeleteFile()">Delete File from Disk</button>`);
-    } else {
-      showToast(`<b style="color:#fff">${fname}</b><br><span style="color:rgba(255,255,255,.5);font-size:11px">Removed from playlist. To delete the file, remove it from your file system manually.</span>`);
-    }
-  }
+  moveToTrash(item);
 };
 
 /* ── IndexedDB handle store ── */
@@ -1191,6 +1189,46 @@ async function getHandleIDB(name) {
     r.onsuccess = () => res(r.result?.handle || null);
     r.onerror = rej;
   });
+}
+
+/* ── Trash folder (move-to-trash delete) ── */
+async function requireTrashDir() {
+  let h = await getHandleIDB('__trashDir__');
+  if (h) {
+    let perm = await h.queryPermission({ mode: 'readwrite' });
+    if (perm === 'prompt') perm = await h.requestPermission({ mode: 'readwrite' });
+    if (perm === 'granted') return h;
+  }
+  try { h = await window.showDirectoryPicker({ mode: 'readwrite' }); }
+  catch(e) { return null; }
+  await saveHandleIDB('__trashDir__', h);
+  return h;
+}
+async function moveToTrash(item) {
+  if (!item?.fileHandle) {
+    removeItem(items.indexOf(item), true);
+    if (item?.name) showToast(`<b style="color:#fff">${item.name}</b> removed from playlist.`, 3000);
+    return;
+  }
+  const trashDir = await requireTrashDir();
+  if (!trashDir) { showToast('No trash folder selected — deletion cancelled.', 4000); return; }
+  try {
+    const subdir = await trashDir.getDirectoryHandle('_SSP_Deleted', { create: true });
+    const file = await item.fileHandle.getFile();
+    const safeName = Date.now() + '_' + item.name;
+    const newHandle = await subdir.getFileHandle(safeName, { create: true });
+    const w = await newHandle.createWritable();
+    await w.write(await file.arrayBuffer());
+    await w.close();
+    const perm = await item.fileHandle.requestPermission({ mode: 'readwrite' });
+    if (perm === 'granted') {
+      await item.fileHandle.remove();
+    } else {
+      showToast(`Copied to _SSP_Deleted but could not delete original (permission denied).`, 5000);
+    }
+    removeItem(items.indexOf(item), true);
+    showToast(`<b style="color:#fff">${item.name}</b> moved to _SSP_Deleted.`, 3000);
+  } catch(e) { showToast('Move to trash failed: ' + e.message, 5000); }
 }
 
 /* ── Auto-save ── */
@@ -1955,20 +1993,11 @@ document.addEventListener('keydown', e => {
   const t = e.target.tagName;
   if (t === 'SELECT' || t === 'INPUT' || t === 'TEXTAREA') return;
 
-  /* Delete = remove from playlist + clear LS, then offer file deletion */
+  /* Delete = move to _SSP_Deleted trash folder */
   if (e.key === 'Delete') {
     e.preventDefault();
     const mi = getMediaItems(), item = mi[cur]; if (!item) return;
-    const fname = item.name || '';
-    pendingDeleteItem = item.fileHandle ? item : null;
-    removeItem(items.indexOf(item), true);
-    if (fname) {
-      if (pendingDeleteItem) {
-        showToast(`<b style="color:#fff">${fname}</b><br><span style="color:rgba(255,255,255,.5);font-size:11px">Removed from playlist.</span><br><button onclick="confirmDeleteFile()">Delete File from Disk</button>`);
-      } else {
-        showToast(`<b style="color:#fff">${fname}</b><br><span style="color:rgba(255,255,255,.5);font-size:11px">Removed from playlist. To delete the file, remove it from your file system manually.</span>`);
-      }
-    }
+    moveToTrash(item);
     return;
   }
   if (e.key === 'Backspace') {
@@ -2005,7 +2034,13 @@ document.addEventListener('keydown', e => {
   else if (k === keyMap.rotCCW) rotateCounter();
   else if (k.toLowerCase() === keyMap.fname.toLowerCase()) toggleFilename();
   else if (k.toLowerCase() === keyMap.playlist.toLowerCase()) togglePL();
-  else if (k.toLowerCase() === 'x') cycleMaxPreset();
+  else if (k.toLowerCase() === keyMap.colPanel.toLowerCase()) g('bcol').click();
+  else if (k.toLowerCase() === keyMap.kbPanel.toLowerCase()) toggleKBModal();
+  else if (k === keyMap.screenshot) g('bss').click();
+  else if (k.toLowerCase() === keyMap.watchMode.toLowerCase()) toggleWatchMode();
+  else if (k.toLowerCase() === keyMap.shuffle.toLowerCase()) shufflePlaylist();
+  else if (k.toLowerCase() === keyMap.reverse.toLowerCase()) { reversePlay = !reversePlay; g('brev').classList.toggle('on', reversePlay); }
+  else if (k.toLowerCase() === keyMap.maxPreset.toLowerCase()) cycleMaxPreset();
 });
 updLandingInfo();
 if (location.hash === '#castmode') {
@@ -2025,18 +2060,6 @@ function showToast(html, dur = 5000) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), dur);
 }
-let pendingDeleteItem = null;
-window.confirmDeleteFile = async function() {
-  const item = pendingDeleteItem; if (!item?.fileHandle) return;
-  pendingDeleteItem = null;
-  g('toast').classList.remove('show');
-  try {
-    const perm = await item.fileHandle.requestPermission({ mode: 'readwrite' });
-    if (perm !== 'granted') { showToast('Permission denied — delete the file manually.', 4000); return; }
-    await item.fileHandle.remove();
-    showToast(`<b style="color:#fff">${item.name}</b> deleted from disk.`, 3000);
-  } catch(e) { showToast(`Could not delete: ${e.message}`, 4000); }
-};
 </script>
 <div id="toast"></div>
 </body>
