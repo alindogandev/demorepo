@@ -32,8 +32,10 @@ html,body{background:#000;height:100%;overflow:hidden;}
 .fe{animation:fdi .7s ease forwards;}
 .fl{animation:fdo .7s ease forwards;}
 .vb{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.65);color:#fff;font-size:11px;padding:4px 10px;border-radius:5px;z-index:2;pointer-events:none;display:flex;align-items:center;gap:5px;font-family:system-ui,sans-serif;}
-#fnov{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,.55);color:rgba(255,255,255,.75);font-size:11px;padding:4px 10px;border-radius:4px;z-index:3;font-family:system-ui,sans-serif;pointer-events:none;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:opacity .2s;}
+#fnov{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,.55);color:rgba(255,255,255,.75);font-size:11px;padding:4px 10px;border-radius:4px;z-index:3;font-family:system-ui,sans-serif;pointer-events:none;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:opacity .2s, right .25s ease;}
 #fnov.hidden{opacity:0;pointer-events:none;}
+#clrhint{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.55);color:rgba(255,255,255,.8);font-size:11px;padding:3px 8px;border-radius:4px;z-index:4;font-family:system-ui,sans-serif;pointer-events:none;opacity:0;transition:opacity .25s;}
+#clrhint.show{opacity:1;}
 
 /* Max Mode companion panel (same file cloned) */
 #maxcomp,#maxcomp2{display:none;position:absolute;overflow:hidden;z-index:1;}
@@ -245,6 +247,7 @@ html,body{background:#000;height:100%;overflow:hidden;}
 <div id="viewer">
   <div id="stage">
     <div id="fnov"></div>
+    <div id="clrhint"></div>
     <div id="watchbadge">WATCH MODE · F5 or Esc to exit</div>
     <div id="maxcomp"></div>
     <div id="maxcomp2"></div>
@@ -340,6 +343,9 @@ html,body{background:#000;height:100%;overflow:hidden;}
     </button>
     <button class="cb" id="bss" title="Save screenshot">
       <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    </button>
+    <button class="cb" id="bcast" title="Open 1080p Cast Window">
+      <svg viewBox="0 0 24 24"><path d="M2 8.5A9.5 9.5 0 0 1 11.5 2"/><path d="M2 13a7 7 0 0 1 7-7"/><path d="M2 17.5A4.5 4.5 0 0 1 6.5 13"/><circle cx="3" cy="19" r="1" fill="currentColor"/><rect x="14" y="3" width="8" height="14" rx="1.5"/><path d="M10 19h12"/></svg>
     </button>
     <button class="cb" id="bplt" title="Playlist">
       <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -616,6 +622,8 @@ const FNS = [
   {id:'rotCCW',  label:'Rotate CCW',      def:'R'},
   {id:'fname',    label:'Toggle Filename', def:'n'},
   {id:'playlist', label:'Toggle Playlist', def:'l'},
+  {id:'saveAs',    label:'Save Image As',    def:''},
+  {id:'overwrite', label:'Overwrite Image',  def:''},
 ];
 let keyMap = {}; FNS.forEach(f => keyMap[f.id] = f.def);
 
@@ -729,12 +737,20 @@ function rcol(t) {
   g(m[t][0]).value = m[t][1]; applyColor();
 }
 window.rcol = rcol;
+let clrHintTimer = null;
+function showClrHint(text) {
+  const el = g('clrhint'); el.textContent = text; el.classList.add('show');
+  clearTimeout(clrHintTimer);
+  clrHintTimer = setTimeout(() => el.classList.remove('show'), 1500);
+}
 function nudgeColor(prop, delta) {
   const mi = getMediaItems(), item = mi[cur]; if (!item) return;
   const elId = {b:'cpb',c:'cpc',s:'cps',h:'cph',g:'cpg',hl:'cphl',sh:'cpsh'}[prop];
   const inp = g(elId);
   inp.value = Math.min(+inp.max, Math.max(+inp.min, +inp.value + delta));
   applyColor();
+  const labels = {b:'Brightness',c:'Contrast',s:'Saturation',h:'Hue',g:'Gamma',hl:'Highlights',sh:'Shadows'};
+  showClrHint(labels[prop] + ' ' + (delta > 0 ? '+' : '') + delta);
 }
 
 function applySlideSettings(i) {
@@ -1427,10 +1443,26 @@ function rebuildSlides(newCur) {
 }
 
 /* ── Playlist ── */
-function togglePL() { const open = g('plpanel').classList.toggle('open'); g('bplt').classList.toggle('on', open); if (open) renderPlaylist(); }
-function closePL() { g('plpanel').classList.remove('open'); g('bplt').classList.remove('on'); }
+function togglePL() {
+  const open = g('plpanel').classList.toggle('open');
+  g('bplt').classList.toggle('on', open);
+  if (open) renderPlaylist();
+  g('fnov').style.right = open ? '312px' : '12px';
+}
+function closePL() {
+  g('plpanel').classList.remove('open');
+  g('bplt').classList.remove('on');
+  g('fnov').style.right = '12px';
+}
 g('bplt').onclick = togglePL;
 g('plclose').onclick = closePL;
+
+function openCastMode() {
+  autoSave();
+  window.open(location.href.split('#')[0] + '#castmode', 'ssp_cast',
+    'width=1920,height=1080,toolbar=no,menubar=no,scrollbars=no,status=no,location=no');
+}
+g('bcast').onclick = openCastMode;
 
 function updPlCur() {
   if (!g('plpanel').classList.contains('open')) return;
@@ -1751,15 +1783,16 @@ function togglePlay() {
   }
 }
 
-/* ── Screenshot ── */
-g('bss').onclick = function() {
-  const mi = getMediaItems(), item = mi[cur], med = sls[cur]?.querySelector('img,video');
-  if (!med || !item) return;
+/* ── Screenshot / Save Image ── */
+async function renderToCanvas() {
+  const mi = getMediaItems(), item = mi[cur];
+  if (!item || item.type === 'video') return null;
+  const med = sls[cur]?.querySelector('img'); if (!med) return null;
   const can = document.createElement('canvas'); can.width = item.w; can.height = item.h;
   const ctx = can.getContext('2d');
   const clr = item.clr || CLR_DEF;
   ctx.filter = `brightness(${clr.b/100}) contrast(${clr.c/100}) hue-rotate(${clr.h}deg) saturate(${clr.s/100})`;
-  try { ctx.drawImage(med, 0, 0, can.width, can.height); } catch(e) { alert('Screenshot failed.'); return; }
+  try { ctx.drawImage(med, 0, 0, can.width, can.height); } catch(e) { return null; }
   const gv = clr.g/100, hl = clr.hl/100, sh = clr.sh/100;
   if (Math.abs(gv-1) > 0.01 || Math.abs(hl) > 0.01 || Math.abs(sh) > 0.01) {
     const id = ctx.getImageData(0,0,can.width,can.height), d = id.data;
@@ -1773,10 +1806,49 @@ g('bss').onclick = function() {
     for (let i = 0; i < d.length; i+=4) { d[i]=lut[d[i]]; d[i+1]=lut[d[i+1]]; d[i+2]=lut[d[i+2]]; }
     ctx.putImageData(id, 0, 0);
   }
+  return can;
+}
+
+g('bss').onclick = async function() {
+  const can = await renderToCanvas(); if (!can) { showToast('No image to capture.', 3000); return; }
   const ts = new Date();
   const fn = `SlideShowPro_${ts.getFullYear()}${String(ts.getMonth()+1).padStart(2,'0')}${String(ts.getDate()).padStart(2,'0')}_${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}${String(ts.getSeconds()).padStart(2,'0')}.jpg`;
   const a = document.createElement('a'); a.download = fn; a.href = can.toDataURL('image/jpeg',.95); a.click();
 };
+
+async function saveImageAs() {
+  const mi = getMediaItems(), item = mi[cur];
+  if (!item || item.type === 'video') { showToast('Save as only works for images.', 3000); return; }
+  const can = await renderToCanvas(); if (!can) { showToast('Render failed.', 3000); return; }
+  const base = item.name.replace(/\.[^.]+$/, '');
+  const ext = (item.name.match(/\.([^.]+)$/) || [,'jpg'])[1].toLowerCase();
+  const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: base + '_v1.' + ext,
+      types: [{ description: 'Image', accept: { [mime]: ['.' + ext] } }],
+    });
+    const blob = await new Promise(res => can.toBlob(res, mime, ext === 'png' ? undefined : 0.95));
+    const w = await handle.createWritable(); await w.write(blob); await w.close();
+    showToast('Saved: ' + handle.name, 3000);
+  } catch(e) { if (e.name !== 'AbortError') showToast('Save failed: ' + e.message, 4000); }
+}
+
+async function overwriteImage() {
+  const mi = getMediaItems(), item = mi[cur];
+  if (!item || item.type === 'video') { showToast('Overwrite only works for images.', 3000); return; }
+  if (!item.fileHandle) { showToast('No file handle — open the file directly to enable overwrite.', 4000); return; }
+  const can = await renderToCanvas(); if (!can) { showToast('Render failed.', 3000); return; }
+  const ext = (item.name.match(/\.([^.]+)$/) || [,'jpg'])[1].toLowerCase();
+  const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+  try {
+    const perm = await item.fileHandle.requestPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') { showToast('Permission denied.', 3000); return; }
+    const blob = await new Promise(res => can.toBlob(res, mime, ext === 'png' ? undefined : 0.95));
+    const w = await item.fileHandle.createWritable(); await w.write(blob); await w.close();
+    showToast('Overwritten: ' + item.name, 3000);
+  } catch(e) { showToast('Overwrite failed: ' + e.message, 4000); }
+}
 
 /* ── Wire controls ── */
 g('bcol').onclick = function() { const p = g('cpanel'); p.classList.toggle('show'); this.classList.toggle('on', p.classList.contains('show')); };
@@ -1817,6 +1889,12 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (watchMode) { toggleWatchMode(); return; }
     if (selectedItems.size > 0) { selectedItems.clear(); updSelBadge(); if (g('plpanel').classList.contains('open')) renderPlaylist(); }
+    return;
+  }
+
+  if (e.ctrlKey && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    if (e.shiftKey) overwriteImage(); else saveImageAs();
     return;
   }
 
