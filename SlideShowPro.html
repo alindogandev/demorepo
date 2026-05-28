@@ -517,6 +517,10 @@ let lDrag = false, lDragStartX = 0, lDragStartY = 0, lDragPX = 0, lDragPY = 0, l
 let midDrag = false, midStartX = 0, midStartY = 0, midStartPX = 0, midStartPY = 0;
 let compZoom = 1, compPanX = 0, compPanY = 0, compKbId = null;
 
+/* Touch state */
+let touchOnComp = false, touchPinching = false, touchDist0 = 0, touchZoom0 = 1;
+let touchX0 = 0, touchY0 = 0, touchPX0 = 0, touchPY0 = 0;
+
 const CLR_DEF = {b:100,c:100,s:100,h:0,hl:0,sh:0,g:100};
 
 /* Speed: 5–500% in steps of 5 */
@@ -876,6 +880,55 @@ document.addEventListener('mouseup', e => {
     if (item) { item.panX = panX; item.panY = panY; saveItemLS(item); }
   }
 });
+
+/* ── Touch support ── */
+stage.addEventListener('touchstart', e => {
+  if (e.target.closest('button,a,select,input')) return;
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    touchPinching = false;
+    touchOnComp = isInCompanion(e.touches[0].clientX, e.touches[0].clientY);
+    touchX0 = e.touches[0].clientX; touchY0 = e.touches[0].clientY;
+    touchPX0 = touchOnComp ? compPanX : panX;
+    touchPY0 = touchOnComp ? compPanY : panY;
+  } else if (e.touches.length === 2) {
+    touchPinching = true;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    touchDist0 = Math.hypot(dx, dy);
+    touchZoom0 = touchOnComp ? compZoom : zoom;
+    touchX0 = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    touchY0 = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    touchPX0 = touchOnComp ? compPanX : panX;
+    touchPY0 = touchOnComp ? compPanY : panY;
+  }
+}, { passive: false });
+
+stage.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 2 && touchPinching) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const scale = Math.hypot(dx, dy) / touchDist0;
+    if (touchOnComp) { compZoom = Math.max(0.1, Math.min(10, touchZoom0 * scale)); updCompT(); }
+    else { zoom = Math.max(0.1, Math.min(10, touchZoom0 * scale)); updZoom(); if (!kbId) staticT(); }
+  } else if (e.touches.length >= 1 && !touchPinching) {
+    const dx = e.touches[0].clientX - touchX0, dy = e.touches[0].clientY - touchY0;
+    if (touchOnComp) { compPanX = touchPX0 + dx / compZoom; compPanY = touchPY0 + dy / compZoom; updCompT(); }
+    else { panX = touchPX0 + (mirrorX ? -dx : dx) / zoom; panY = touchPY0 + (mirrorY ? -dy : dy) / zoom; if (!kbId) staticT(); }
+  }
+}, { passive: false });
+
+stage.addEventListener('touchend', e => {
+  if (e.touches.length < 2) touchPinching = false;
+  if (e.touches.length === 0) {
+    const item = getMediaItems()[cur];
+    if (!touchOnComp && item) { item.panX = panX; item.panY = panY; item.zoom = zoom; saveItemLS(item); }
+  } else if (e.touches.length === 1 && !touchPinching) {
+    touchX0 = e.touches[0].clientX; touchY0 = e.touches[0].clientY;
+    touchPX0 = touchOnComp ? compPanX : panX; touchPY0 = touchOnComp ? compPanY : panY;
+  }
+}, { passive: true });
 
 /* ── Transform (rotation + mirror) ── */
 function mediaPrefix() {
@@ -1282,7 +1335,7 @@ g('bru').onclick = function() {
   if (compKbId) { cancelAnimationFrame(compKbId); compKbId = null; }
   sls.forEach(s => { const v = s.querySelector('video'); if (v) v.pause(); });
   items = []; sls = []; selectedItems.clear(); lastClickedMI = -1;
-  [...stage.children].forEach(c => { if (c.id !== 'fnov' && c.id !== 'watchbadge' && c.id !== 'maxcomp' && c.id !== 'maxcomp2') c.remove(); });
+  [...stage.children].forEach(c => { if (c.id !== 'fnov' && c.id !== 'clrhint' && c.id !== 'watchbadge' && c.id !== 'maxcomp' && c.id !== 'maxcomp2') c.remove(); });
   stage.classList.remove('hmax','vmax','hmax3','vmax3');
   viewer.style.display = 'none'; dz.style.display = 'flex'; fi.value = '';
   if (!ctrlsVisible) toggleControls();
@@ -1396,7 +1449,7 @@ function makeVid(item) {
 }
 
 function buildSlideDOM() {
-  [...stage.children].forEach(c => { if (c.id !== 'fnov' && c.id !== 'watchbadge' && c.id !== 'maxcomp' && c.id !== 'maxcomp2') c.remove(); });
+  [...stage.children].forEach(c => { if (c.id !== 'fnov' && c.id !== 'clrhint' && c.id !== 'watchbadge' && c.id !== 'maxcomp' && c.id !== 'maxcomp2') c.remove(); });
   sls = [];
   getMediaItems().forEach((item, i) => {
     const sl = document.createElement('div'); sl.className = 'sl';
@@ -1955,6 +2008,16 @@ document.addEventListener('keydown', e => {
   else if (k.toLowerCase() === 'x') cycleMaxPreset();
 });
 updLandingInfo();
+if (location.hash === '#castmode') {
+  document.title = 'SlideShowPro — Cast';
+  const raw = localStorage.getItem('ssp_autosave');
+  if (raw) {
+    g('lbcont').style.animation = 'pulse 1.5s ease-in-out infinite';
+    const style = document.createElement('style');
+    style.textContent = '@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.3)}50%{box-shadow:0 0 0 8px rgba(255,255,255,0)}}';
+    document.head.appendChild(style);
+  }
+}
 
 let toastTimer = null;
 function showToast(html, dur = 5000) {
