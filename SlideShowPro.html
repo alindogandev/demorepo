@@ -635,6 +635,7 @@ const FNS = [
   {id:'shuffle',   label:'Shuffle Playlist',    def:'z'},
   {id:'reverse',   label:'Toggle Reverse',      def:'t'},
   {id:'maxPreset', label:'Cycle Max Preset',    def:'x'},
+  {id:'castMode',  label:'Open Cast Window',   def:''},
 ];
 let keyMap = {}; FNS.forEach(f => keyMap[f.id] = f.def);
 
@@ -1551,7 +1552,7 @@ g('plclose').onclick = closePL;
 function openCastMode() {
   autoSave();
   window.open(location.href.split('#')[0] + '#castmode', 'ssp_cast',
-    'width=1920,height=1080,toolbar=no,menubar=no,scrollbars=no,status=no,location=no');
+    'width=1920,height=1080');
 }
 g('bcast').onclick = openCastMode;
 
@@ -2041,6 +2042,7 @@ document.addEventListener('keydown', e => {
   else if (k.toLowerCase() === keyMap.shuffle.toLowerCase()) shufflePlaylist();
   else if (k.toLowerCase() === keyMap.reverse.toLowerCase()) { reversePlay = !reversePlay; g('brev').classList.toggle('on', reversePlay); }
   else if (k.toLowerCase() === keyMap.maxPreset.toLowerCase()) cycleMaxPreset();
+  else if (keyMap.castMode && k.toLowerCase() === keyMap.castMode.toLowerCase()) openCastMode();
 });
 updLandingInfo();
 if (location.hash === '#castmode') {
